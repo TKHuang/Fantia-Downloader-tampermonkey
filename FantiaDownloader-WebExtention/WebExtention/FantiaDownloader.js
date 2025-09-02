@@ -872,6 +872,103 @@
 			$(div).find("div.btn-group-tabs").append(`<button box-type="box" class="btn btn-default btn-md downloadButton zip" onclick="getImg(event)"><i class="fa fa-file-archive-o fa-2x" style="color: #f9a63b  !important;"></i> <span class="btn-text-sub downloadSpanZip" style="color: #f9a63b  !important;">${setting.getDefault('downloadImgZip')}</span></button><button box-type="box" class="btn btn-default btn-md downloadButton file" onclick="getImg(event)"><i class="fa fa-download fa-2x" style="color: #fe7070 !important;"></i> <span class="btn-text-sub downloadSpan" style="color: #fe7070 !important;">${setting.getDefault('downloadImg')}</span></button>`);
 		});
 		$(`.the-post`).find("div.btn-group-tabs").append(`<button box-type="post" class="btn btn-default btn-md downloadButton zip" onclick="getImg(event)"><i class="fa fa-file-archive-o fa-2x" style="color: #f9a63b  !important;"></i> <span class="btn-text-sub downloadSpanZip" style="color: #f9a63b  !important;">${setting.getDefault('downloadImgZip')}</span></button><button box-type="post" class="btn btn-default btn-md downloadButton file" onclick="getImg(event)"><i class="fa fa-download fa-2x" style="color: #fe7070 !important;"></i> <span class="btn-text-sub downloadSpan" style="color: #fe7070 !important;">${setting.getDefault('downloadImg')}</span></button>`);
+
+		// Add Download All under .post-status
+		const postStatus = document.querySelector('.post-status');
+		const postBtnGroup = document.querySelector('.the-post .btn-group.btn-group-tabs[role="group"], .the-post div.btn-group-tabs[role="group"]');
+		if (postBtnGroup && !document.getElementById('fd-download-all')) {
+			const btn = document.createElement('button');
+			btn.id = 'fd-download-all';
+			btn.className = 'btn btn-default btn-md';
+			btn.style.marginLeft = '8px';
+			btn.innerHTML = '<i class="fa fa-download fa-2x" style="color: #4caf50 !important;"></i> <span class="btn-text-sub" id="fd-download-all-text" style="color: #4caf50 !important;">Download All</span>';
+			btn.addEventListener('click', function() {
+				try {
+					let date = document.querySelector('.post-date span')?.innerText || '';
+					date = date.split(' ')[0].replaceAll('/', '.').substring(2);
+					let title = document.querySelector('.post-header .post-title')?.innerText || '';
+					const folderName = `${date} ${title}`.trim();
+
+					// Collect items from existing download buttons created by this script
+					const items = [];
+					document.querySelectorAll('button.btn.downloadButton.file').forEach((b) => {
+						// Trigger click as fallback later; we also try to deduce URLs from data if available
+						// No direct URL attached to buttons, so we rely on content-blocks and anchors as well
+					});
+
+					// Collect file links in file content blocks
+					document.querySelectorAll('.content-block.type-file a.btn[href*="/download/"]').forEach((a) => {
+						const url = (a instanceof HTMLAnchorElement) ? a.href : null;
+						if (!url) return;
+						const nameNode = a.parentElement?.querySelector('.text-center.text-muted');
+						const base = nameNode?.textContent?.trim();
+						items.push({ url, filename: base || undefined });
+					});
+
+					// Post image -> name as post.<ext>, use original from meta JSON
+					(function() {
+						try {
+							const raw = window.setting?.metaJson?.post?.thumb?.original;
+							if (raw && /^https?:\/\//.test(raw)) {
+								const clean = raw.split('#')[0].split('?')[0];
+								const ext = (clean.lastIndexOf('.') > -1) ? clean.substring(clean.lastIndexOf('.') + 1) : 'jpg';
+								items.push({ url: raw, filename: `cover.${ext}` });
+							}
+						} catch (e) {}
+					})();
+
+					// Image blocks -> use meta original URLs; name as <block title>_1, _2 ... (keep ext)
+					document.querySelectorAll('div.post-content-inner.boxIndex').forEach((box, bi) => {
+						let blockTitle = box.querySelector('.post-content-title')?.textContent?.trim();
+						const idxAttr = box.getAttribute('boxIndex');
+						const index = (idxAttr != null) ? Number(idxAttr) : bi;
+						try {
+							const content = window.setting?.metaData?.content?.[index];
+							if (content && content.category === 'photo_gallery') {
+								blockTitle = blockTitle || content.title || `block-${index}`;
+								let seq = 0;
+								(content.post_content_photos || []).forEach((p) => {
+									const raw = p?.url?.original;
+									if (!raw || !/^https?:\/\//.test(raw)) return;
+									const clean = raw.split('#')[0].split('?')[0];
+									const ext = (clean.lastIndexOf('.') > -1) ? clean.substring(clean.lastIndexOf('.') + 1) : 'jpg';
+									seq += 1;
+									items.push({ url: raw, filename: `${blockTitle}_${seq}.${ext}` });
+								});
+							}
+						} catch (e) {}
+					});
+
+					// Post a message to the content script to forward to background
+					window.postMessage({
+						__from: 'fantia_downloader_page',
+						type: 'download_all',
+						items,
+						folderName
+					}, '*');
+
+					// Fallback: trigger all existing file buttons if items look empty
+					if (items.length === 0) {
+						document.querySelectorAll('button.btn.downloadButton.file').forEach((b) => {
+							(b instanceof HTMLButtonElement) && b.click();
+						});
+					}
+
+					// Show progress 0/total
+					const text = document.getElementById('fd-download-all-text');
+					if (text && items.length > 0) {
+						text.textContent = `0 / ${items.length}`;
+					}
+				} catch (e) {
+					// Last-resort fallback
+					document.querySelectorAll('button.btn.downloadButton.file').forEach((b) => {
+						(b instanceof HTMLButtonElement) && b.click();
+					});
+				}
+			});
+			postBtnGroup.appendChild(btn);
+		}
+
 		$('.set-FD').remove();
 		$("div#page").append(`<div id="settingCenter" onclick="openSettingCenter()"></div>`);
 		$("div#page").append(setting.settingCenterTemplate());
@@ -885,6 +982,21 @@
 		}
 		return;
 	};
+
+	// Receive progress events from content script (relayed from background)
+	window.addEventListener('message', function(e){
+		if (!e || !e.data || e.data.__from !== 'fantia_downloader_content') return;
+		const text = document.getElementById('fd-download-all-text');
+		if (!text) return;
+		if (e.data.type === 'download_progress') {
+			const c = Number(e.data.completed) || 0;
+			const t = Number(e.data.total) || 0;
+			text.textContent = `${c} / ${t}`;
+		}
+		if (e.data.type === 'download_done') {
+			text.textContent = `${text.textContent} ✓`;
+		}
+	});
 
 	window.getImg = (event) => {
 		return checkBrowser(event, (event) => {

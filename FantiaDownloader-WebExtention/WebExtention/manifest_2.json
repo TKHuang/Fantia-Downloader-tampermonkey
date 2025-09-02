@@ -6,6 +6,11 @@
   "author": "suzumiyahifumi",
   "icons": { "64": "icon_64.png" },
   "default_locale": "en",
+  "permissions": ["downloads"],
+  "background": {
+    "scripts": ["background.js"],
+    "persistent": false
+  },
   "content_scripts" : [
     {  
         "matches" : ["https://fantia.jp/posts/*", "https://fantia.jp/fanclubs/*/backnumbers*"],  

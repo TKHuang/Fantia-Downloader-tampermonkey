@@ -1,16 +1,36 @@
-{  
-  "name": "Fantia downloader",  
-  "version": "3.1.9",  
+{
+  "name": "Fantia downloader",
+  "version": "3.1.9",
   "description": "Download your Fantia rewards more easily! ",
   "manifest_version": 2,
   "author": "suzumiyahifumi",
-  "icons": { "64": "icon_64.png" },
-  "default_locale": "en",
-  "content_scripts" : [
-    {  
-        "matches" : ["https://fantia.jp/posts/*", "https://fantia.jp/fanclubs/*/backnumbers*"],  
-        "js" : ["inject.js"]
-    }  
-   ],
-  "web_accessible_resources": [ "FantiaDownloader.js", "jquery-3.4.1.js", "jszip.js", "zip-full.min.js" ]  
+  "icons": {
+    "64": "WebExtention/icon_64.png"
+  },
+  "permissions": [
+    "downloads"
+  ],
+  "background": {
+    "scripts": [
+      "WebExtention/background.js"
+    ],
+    "persistent": true
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://fantia.jp/posts/*",
+        "https://fantia.jp/fanclubs/*/backnumbers*"
+      ],
+      "js": [
+        "WebExtention/inject.js"
+      ]
+    }
+  ],
+  "web_accessible_resources": [
+    "WebExtention/FantiaDownloader.js",
+    "WebExtention/jquery-3.4.1.js",
+    "WebExtention/jszip.js",
+    "WebExtention/zip-full.min.js"
+  ]
 }
